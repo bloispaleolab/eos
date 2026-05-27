@@ -67,14 +67,14 @@ na_coords = ansp %>% left_join(collectionunits_df,by=join_by(collectionunitid)) 
 There is one weird dataset with no coordinates in the associated site, Big Lake:
 ```{r jsadosi,message=FALSE,warning=FALSE,echo=FALSE}
 
-na_coords %>% select(datasetid,datasetname,notes.x,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
+na_coords %>% select(datasetid,datasetname,datasettype,notes.x,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
 ```
 
 Otherwise, here is a count of the datasettypes as well as a table of all the datasets:
 ```{r jsdfdfdadosi,message=FALSE,warning=FALSE,echo=FALSE}
 ansp %>% distinct(datasetid,.keep_all=TRUE) %>% count(datasettype) %>% arrange(desc(n)) %>% datatable(rownames=FALSE)
 
-ansp %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype,description) %>% datatable(rownames=FALSE)
+ansp %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype,notes) %>% datatable(rownames=FALSE)
 
 ```
 
