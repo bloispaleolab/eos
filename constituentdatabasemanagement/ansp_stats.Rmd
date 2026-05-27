@@ -1,0 +1,112 @@
+---
+title: "ANSP stats"
+output: html_document
+date: "2026-05-27"
+---
+Here is some summary information about the Academy of Natural Sciences at Drexel constituent DB in Neotoma.
+
+```{r setup, include=FALSE}
+
+library(httr)
+library(tidyverse)
+library(sf)
+library(DT)
+library(leaflet)
+library(tmap)
+
+tables = c("datasets","datasettypes","datasetdatabases","constituentdatabases","sites","collectionunits")
+
+for (q in seq(length(tables))) {
+tablename=tables[q]
+
+length_table = content(GET(paste0("https://api.neotomadb.org/v2.0/data/dbtables/",tablename,"?count=true")))$data
+
+divider = 80000
+num_reps = ceiling(as.numeric(length_table[[1]]$count)/divider)
+
+tablelist = list()
+for (i in seq(num_reps)) {
+  start= (i-1)*divider
+  end = divider
+  chunk = content(GET(paste0("https://api.neotomadb.org/v2.0/data/dbtables/",tablename,"?count=false&offset=",start,"&limit=",end)))$data
+ 
+  if (!is.null(chunk)) {
+  tablelist = append(tablelist,chunk)
+  }
+  }
+
+
+table_mat = matrix(nrow=length(tablelist),ncol=length(tablelist[[1]]))
+
+for (i in seq(length(tablelist))) {
+  for(j in seq(length(tablelist[[1]])) ) {
+    if (!is.null(tablelist[[i]][[j]])) {
+      table_mat[i,j] = tablelist[[i]][[j]]
+    }}}
+
+
+table_df = as.data.frame(table_mat)
+
+
+names(table_df) =names(chunk[[1]])
+
+assign(paste0(tablename,"_df"), table_df)}
+```
+
+
+```{r kdsal, message=FALSE, warning=FALSE,echo=FALSE}
+
+ansp = datasets_df %>% left_join(datasetdatabases_df,by=join_by(datasetid)) %>% left_join(constituentdatabases_df,by=join_by(databaseid)) %>% left_join(datasettypes_df,by=join_by(datasettypeid)) %>% dplyr::filter(databasename == "Academy of Natural Sciences of Drexel University")
+
+
+ansp_sf = ansp %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% dplyr::filter(!is.na(longitudewest) & !is.na(latitudesouth)) %>% st_as_sf(coords=c("longitudewest","latitudesouth"),crs=4326)
+
+na_coords = ansp %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% dplyr::filter(is.na(longitudewest) | is.na(latitudesouth))
+```
+
+There is one weird dataset with no coordinates in the associated site, Big Lake:
+```{r jsadosi,message=FALSE,warning=FALSE,echo=FALSE}
+
+na_coords %>% select(datasetid,datasetname,notes.x,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
+```
+
+Otherwise, here is a count of the datasettypes as well as a table of all the datasets:
+```{r jsdfdfdadosi,message=FALSE,warning=FALSE,echo=FALSE}
+ansp %>% distinct(datasetid,.keep_all=TRUE) %>% count(datasettype) %>% arrange(desc(n)) %>% datatable(rownames=FALSE)
+
+ansp %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype,description) %>% datatable(rownames=FALSE)
+
+```
+
+And here's an attempt at a map. First one is interactive, includes all sites. Second is static, faceted by datasettype:
+
+```{r klfdsnflksn, message=FALSE,warning=FALSE,echo=FALSE}
+
+
+pal <- colorFactor(palette = "Set3", domain =ansp_sf$datasettype)
+
+
+leaflet() %>%
+    addTiles() %>%
+    addCircleMarkers(data=ansp_sf,
+                     stroke=FALSE,
+                     color=~pal(datasettype),
+                     radius=3,
+                     fillOpacity=0.5,
+                     popup = ~sitename) %>% 
+  addLegend(position = "bottomright",
+            pal = pal, 
+            values= ansp_sf$datasettype)
+
+
+library(tmap)
+
+tm_shape(ansp_sf) +
+  tm_basemap("OpenStreetMap") +
+  tm_dots(
+    col = "black",
+    size = 0.15,
+    alpha = 0.5
+  ) +
+  tm_facets(by = "datasettype")
+```
