@@ -1,5 +1,0 @@
-"QA","Quadrangle Approx."
-"QP","Quadrangle Precise"
-"QC","Quadrangle County"
-"E","Exact"
-
