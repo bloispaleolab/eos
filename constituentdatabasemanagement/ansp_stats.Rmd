@@ -3,7 +3,10 @@ title: "ANSP stats"
 output: html_document
 date: "2026-05-27"
 ---
+
 Here is some summary information about the Academy of Natural Sciences at Drexel constituent DB in Neotoma.
+
+# Summary of Datasets
 
 ```{r setup, include=FALSE}
 
@@ -53,7 +56,6 @@ names(table_df) =names(chunk[[1]])
 assign(paste0(tablename,"_df"), table_df)}
 ```
 
-
 ```{r kdsal, message=FALSE, warning=FALSE,echo=FALSE}
 
 ansp = datasets_df %>% left_join(datasetdatabases_df,by=join_by(datasetid)) %>% left_join(constituentdatabases_df,by=join_by(databaseid)) %>% left_join(datasettypes_df,by=join_by(datasettypeid)) %>% dplyr::filter(databasename == "Academy of Natural Sciences of Drexel University")
@@ -64,21 +66,36 @@ ansp_sf = ansp %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>
 na_coords = ansp %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% dplyr::filter(is.na(longitudewest) | is.na(latitudesouth))
 ```
 
-There is one weird dataset with no coordinates in the associated site, Big Lake:
-```{r jsadosi,message=FALSE,warning=FALSE,echo=FALSE}
 
-na_coords %>% select(datasetid,datasetname,datasettype,notes.x,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
+
+The below table lists some basic metadata connected to all 8,090 datasets in the ANSP.
+
+```{rkoalnsslkd, message=FALSE,warning=FALSE,echo=FALSE}
+ansp %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype) %>% datatable(rownames=FALSE)
+
 ```
 
-Otherwise, here is a count of the datasettypes as well as a table of all the datasets:
+The below table represents the same data in a wide format. Instead of each dataset, I list each collectionunit and the number of datasets associated with it by datasettype.
+
+```{r askjldalsk, message=FALSE,warning=FALSE,echo=FALSE}
+
+collectionwide = ansp %>% mutate(dummyvalue = 1) %>% pivot_wider(id_cols=c(collectionunitid,),names_from=datasettype,values_fn=sum,values_from=dummyvalue)  %>%
+  mutate(
+    total_datasets = rowSums(across(2:13), na.rm = TRUE)
+  ) %>% left_join(collectionunits_df, by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% select(c(1,15,16,34,2:14,))
+
+datatable(collectionwide,rownames=FALSE)
+
+
+```
+
+The below table is a count of all the datasettypes associated with the ANSP. The most abundant datasettypes are ```water chemistry``` and ```diatom surface sample```, but there are a wide variety of datasets included which are not as obviously connected to diatoms.
+
 ```{r jsdfdfdadosi,message=FALSE,warning=FALSE,echo=FALSE}
 ansp %>% distinct(datasetid,.keep_all=TRUE) %>% count(datasettype) %>% arrange(desc(n)) %>% datatable(rownames=FALSE)
-
-ansp %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype,notes) %>% datatable(rownames=FALSE)
-
 ```
 
-And here's an attempt at a map. First one is interactive, includes all sites. Second is static, faceted by datasettype:
+The following map shows the spatial distribution of ANSP data by datasettype. You can click a datasettype on or off in order to better see the distribution of the less abundant datasettypes.
 
 ```{r klfdsnflksn, message=FALSE,warning=FALSE,echo=FALSE}
 
@@ -86,27 +103,45 @@ And here's an attempt at a map. First one is interactive, includes all sites. Se
 pal <- colorFactor(palette = "Set3", domain =ansp_sf$datasettype)
 
 
-leaflet() %>%
-    addTiles() %>%
-    addCircleMarkers(data=ansp_sf,
-                     stroke=FALSE,
-                     color=~pal(datasettype),
-                     radius=3,
-                     fillOpacity=0.5,
-                     popup = ~sitename) %>% 
-  addLegend(position = "bottomright",
-            pal = pal, 
-            values= ansp_sf$datasettype)
+m <- leaflet() %>%
+  addTiles()
+
+for (dt in unique(ansp_sf$datasettype)) {
+
+  m <- m %>%
+    addCircleMarkers(
+      data = filter(ansp_sf, datasettype == dt),
+      stroke = FALSE,
+      color = pal(dt),
+      radius = 3,
+      fillOpacity = 0.5,
+      popup = ~sitename,
+      group = dt
+    )
+}
+
+m %>%
+  addLayersControl(
+    overlayGroups = unique(ansp_sf$datasettype),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
 
 
-library(tmap)
+# Odd data
 
-tm_shape(ansp_sf) +
-  tm_basemap("OpenStreetMap") +
-  tm_dots(
-    col = "black",
-    size = 0.15,
-    alpha = 0.5
-  ) +
-  tm_facets(by = "datasettype")
+There is one dataset with no coordinates in the associated site, Big Lake:
+```{r jsadosi,message=FALSE,warning=FALSE,echo=FALSE}
+
+na_coords %>% select(datasetid,datasetname,datasettype,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
+```
+
+Additionally, I attempted to find any datasets that might be in the ANSP by mistake. I searched specifically for any collectionunits that only had a single dataset, where the dataset was neither explicitly about water chemistry or diatoms. I found only 11 geochronological datasets which are the only dataset associated with their collectionunit. They mostly seem to be connected to Lake Annie. However, at the site level (siteids 306, 1597, and 29382), all of these singleton chronologies are associated with a diatom-type dataset.
+
+```{r psjoaodjps, message=FALSE,warning=FALSE,echo=FALSE}
+
+odd_singletons = collectionwide %>% dplyr::filter(total_datasets == 1 & is.na(`water chemistry`) & is.na(diatom) & is.na(`diatom surface sample`) & is.na(`diatom top-bottom`) & is.na(`diatom bottom sample`))
+
+datatable(odd_singletons,rownames=FALSE)
 ```
