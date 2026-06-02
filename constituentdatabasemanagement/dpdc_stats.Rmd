@@ -1,0 +1,147 @@
+---
+title: "DPDC Stats"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+Here is some summary information about the Diatom Paleolimnology Data Cooperative constituent DB in Neotoma.
+
+# Summary of Datasets
+
+```{r setup, include=FALSE}
+
+library(httr)
+library(tidyverse)
+library(sf)
+library(DT)
+library(leaflet)
+library(tmap)
+
+tables = c("datasets","datasettypes","datasetdatabases","constituentdatabases","sites","collectionunits")
+
+for (q in seq(length(tables))) {
+tablename=tables[q]
+
+length_table = content(GET(paste0("https://api.neotomadb.org/v2.0/data/dbtables/",tablename,"?count=true")))$data
+
+divider = 80000
+num_reps = ceiling(as.numeric(length_table[[1]]$count)/divider)
+
+tablelist = list()
+for (i in seq(num_reps)) {
+  start= (i-1)*divider
+  end = divider
+  chunk = content(GET(paste0("https://api.neotomadb.org/v2.0/data/dbtables/",tablename,"?count=false&offset=",start,"&limit=",end)))$data
+ 
+  if (!is.null(chunk)) {
+  tablelist = append(tablelist,chunk)
+  }
+  }
+
+
+table_mat = matrix(nrow=length(tablelist),ncol=length(tablelist[[1]]))
+
+for (i in seq(length(tablelist))) {
+  for(j in seq(length(tablelist[[1]])) ) {
+    if (!is.null(tablelist[[i]][[j]])) {
+      table_mat[i,j] = tablelist[[i]][[j]]
+    }}}
+
+
+table_df = as.data.frame(table_mat)
+
+
+names(table_df) =names(chunk[[1]])
+
+assign(paste0(tablename,"_df"), table_df)}
+```
+
+```{r kdsal, message=FALSE, warning=FALSE,echo=FALSE}
+
+DPDC = datasets_df %>% left_join(datasetdatabases_df,by=join_by(datasetid)) %>% left_join(constituentdatabases_df,by=join_by(databaseid)) %>% left_join(datasettypes_df,by=join_by(datasettypeid)) %>% dplyr::filter(databasename == "Diatom Paleolimnology Data Cooperative (DPDC)")
+
+
+DPDC_sf = DPDC %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% dplyr::filter(!is.na(longitudewest) & !is.na(latitudesouth)) %>% st_as_sf(coords=c("longitudewest","latitudesouth"),crs=4326)
+
+na_coords = DPDC %>% left_join(collectionunits_df,by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% dplyr::filter(is.na(longitudewest) | is.na(latitudesouth))
+```
+
+
+
+The below table lists some basic metadata connected to all 680 datasets in the DPDC.
+
+```{r koalnsslkd, message=FALSE,warning=FALSE,echo=FALSE}
+DPDC %>% distinct(datasetid,.keep_all = TRUE) %>% select(datasetid,datasetname,datasettype) %>% datatable(rownames=FALSE)
+
+```
+
+The below table represents the same data in a wide format. Instead of each dataset, I list each collectionunit and the number of datasets associated with it by datasettype.
+
+```{r askjldalsk, message=FALSE,warning=FALSE,echo=FALSE}
+
+collectionwide = DPDC %>% mutate(dummyvalue = 1) %>% pivot_wider(id_cols=c(collectionunitid,),names_from=datasettype,values_fn=sum,values_from=dummyvalue)  %>%
+  mutate(
+    total_datasets = rowSums(across(2:5), na.rm = TRUE)
+  ) %>% left_join(collectionunits_df, by=join_by(collectionunitid)) %>% left_join(sites_df,by=join_by(siteid)) %>% select(c(1,7,8,26,2:6,))
+
+datatable(collectionwide,rownames=FALSE)
+
+
+```
+
+The below table is a count of all the datasettypes associated with the DPDC. The most abundant datasettypes are ```water chemistry``` and ```diatom surface sample```, but there are a wide variety of datasets included which are not as obviously connected to diatoms.
+
+```{r jsdfdfdadosi,message=FALSE,warning=FALSE,echo=FALSE}
+DPDC %>% distinct(datasetid,.keep_all=TRUE) %>% count(datasettype) %>% arrange(desc(n)) %>% datatable(rownames=FALSE)
+```
+
+The following map shows the spatial distribution of DPDC data by datasettype. You can click a datasettype on or off in order to better see the distribution of the less abundant datasettypes.
+
+```{r klfdsnflksn, message=FALSE,warning=FALSE,echo=FALSE}
+
+
+pal <- colorFactor(palette = "Set3", domain =DPDC_sf$datasettype)
+
+
+m <- leaflet() %>%
+  addTiles()
+
+for (dt in unique(DPDC_sf$datasettype)) {
+
+  m <- m %>%
+    addCircleMarkers(
+      data = filter(DPDC_sf, datasettype == dt),
+      stroke = FALSE,
+      color = pal(dt),
+      radius = 3,
+      fillOpacity = 0.5,
+      popup = ~sitename,
+      group = dt
+    )
+}
+
+m %>%
+  addLayersControl(
+    overlayGroups = unique(DPDC_sf$datasettype),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+```
+
+
+# Odd data
+
+There are no datasets associated with sites lacking coordinates.
+```{r jsadosi,message=FALSE,warning=FALSE,echo=FALSE}
+
+#na_coords %>% select(datasetid,datasetname,datasettype,sitename,latitudenorth,longitudeeast,sitedescription) %>% datatable(rownames=FALSE)
+```
+
+Additionally, I attempted to find any datasets that might be in the DPDC by mistake. I searched specifically for any collectionunits that only had a single dataset, where the dataset was neither explicitly about water chemistry or diatoms. There were no such collectionunits.
+
+```{r psjoaodjps, message=FALSE,warning=FALSE,echo=FALSE}
+
+odd_singletons = collectionwide %>% dplyr::filter(total_datasets == 1 & is.na(`water chemistry`) & is.na(diatom) & is.na(`diatom surface sample`))
+
+datatable(odd_singletons,rownames=FALSE)
+```
