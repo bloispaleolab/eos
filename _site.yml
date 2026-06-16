@@ -1,7 +1,0 @@
-name: "Reckoning with Neotoma: EOS"
-
-output_dir: "docs"
-output:
-  html_document:
-    theme: flatly
-    highlight: textmate
